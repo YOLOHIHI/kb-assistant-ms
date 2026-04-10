@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../demo
+  - eureka.yaml
+patches:
+  - path: gateway-eureka-patch.yaml
+  - path: index-eureka-patch.yaml
+  - path: doc-eureka-patch.yaml
+  - path: ai-eureka-patch.yaml
+images:
+  - name: kb-eureka-server
+    newName: ghcr.io/replace-me-owner/kb-eureka-server
+    newTag: latest

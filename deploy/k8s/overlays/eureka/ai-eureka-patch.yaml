@@ -1,0 +1,14 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kb-ai-service
+spec:
+  template:
+    spec:
+      containers:
+        - name: kb-ai-service
+          env:
+            - name: EUREKA_ENABLED
+              value: "true"
+            - name: EUREKA_SERVER_URL
+              value: http://kb-eureka-server:8761

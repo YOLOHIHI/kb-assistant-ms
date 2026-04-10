@@ -1,0 +1,27 @@
+server:
+  port: 8081
+
+kb:
+  internalToken: ${KB_INTERNAL_TOKEN:dev-internal-token}
+  indexUrl: ${KB_INDEX_URL:http://localhost:8082}
+  dataDir: ${KB_DOC_DATA_DIR:data}
+  # Optional OCR service, e.g. http://kb-ocr-service:8070
+  ocrUrl: ${KB_OCR_URL:}
+
+logging:
+  level:
+    root: INFO
+
+spring:
+  config:
+    import: optional:file:.env[.properties],optional:file:../../.env[.properties]
+  application:
+    name: kb-doc-service
+
+eureka:
+  client:
+    enabled: ${EUREKA_ENABLED:false}
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761}/eureka/
+  instance:
+    prefer-ip-address: true

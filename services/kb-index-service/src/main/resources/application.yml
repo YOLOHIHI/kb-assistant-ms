@@ -1,0 +1,51 @@
+server:
+  port: 8082
+
+spring:
+  config:
+    import: optional:file:.env[.properties],optional:file:../../.env[.properties]
+  datasource:
+    url: ${KB_DB_URL:jdbc:postgresql://localhost:5432/kb}
+    username: ${KB_DB_USER:kb}
+    password: ${KB_DB_PASSWORD:kb}
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 30000
+  jpa:
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        default_schema: idx
+  flyway:
+    locations: classpath:db/migration
+    schemas: idx
+  application:
+    name: kb-index-service
+
+kb:
+  internalToken: ${KB_INTERNAL_TOKEN:dev-internal-token}
+  gatewayUrl: ${KB_GATEWAY_URL:http://localhost:8080}
+  embedderUrl: ${KB_EMBEDDER_URL:http://localhost:8090}
+  embedApiBaseUrl: ${KB_EMBED_API_BASE_URL:}
+  embedApiKey: ${KB_EMBED_API_KEY:}
+
+index:
+  bm25:
+    k1: 1.2
+    b: 0.75
+  hybrid:
+    bm25Weight: 0.35
+    denseWeight: 0.65
+
+logging:
+  level:
+    root: INFO
+
+eureka:
+  client:
+    enabled: ${EUREKA_ENABLED:false}
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761}/eureka/
+  instance:
+    prefer-ip-address: true

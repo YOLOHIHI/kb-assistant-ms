@@ -1,0 +1,56 @@
+# syntax=docker/dockerfile:1.7
+
+# ─────────────────────────────────────────────────────────────
+# Stage 1: Build all three Next.js frontends (pnpm workspace)
+# ─────────────────────────────────────────────────────────────
+FROM node:20-alpine AS frontend-build
+RUN npm install -g pnpm
+WORKDIR /workspace
+
+# Copy workspace manifests and shared package first (cache layer)
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/shared/package.json ./packages/shared/
+COPY apps/chat/package.json ./apps/chat/
+COPY apps/admin/package.json ./apps/admin/
+COPY apps/home/package.json ./apps/home/
+
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile
+
+# Copy app sources and build
+COPY packages/shared/ ./packages/shared/
+COPY apps/chat/ ./apps/chat/
+COPY apps/admin/ ./apps/admin/
+COPY apps/home/ ./apps/home/
+
+RUN pnpm --filter @kb/chat run build \
+ && pnpm --filter @kb/admin run build \
+ && pnpm --filter @kb/home run build
+# Outputs: apps/chat/out, apps/admin/out, apps/home/out
+
+# ─────────────────────────────────────────────────────────────
+# Stage 2: Build the Spring Boot gateway (Maven)
+# ─────────────────────────────────────────────────────────────
+FROM maven:3.9.9-eclipse-temurin-21 AS build
+WORKDIR /workspace
+COPY pom.xml .
+COPY services services
+
+# Inject compiled frontends into gateway static resources
+COPY --from=frontend-build /workspace/apps/chat/out  /workspace/services/kb-gateway/src/main/resources/static/chat-app
+COPY --from=frontend-build /workspace/apps/admin/out /workspace/services/kb-gateway/src/main/resources/static/admin
+COPY --from=frontend-build /workspace/apps/home/out  /workspace/services/kb-gateway/src/main/resources/static/
+
+RUN --mount=type=cache,target=/root/.m2 mvn -q -DskipTests -pl services/kb-gateway -am package
+
+# ─────────────────────────────────────────────────────────────
+# Stage 3: Minimal runtime image
+# ─────────────────────────────────────────────────────────────
+FROM eclipse-temurin:21-jre AS runtime
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl \
+ && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --from=build /workspace/services/kb-gateway/target/kb-gateway-*.jar app.jar
+EXPOSE 8080
+ENV JAVA_OPTS=""
+ENTRYPOINT ["sh","-c","java $JAVA_OPTS -jar /app/app.jar"]

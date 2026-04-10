@@ -1,0 +1,32 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+generatorOptions:
+  disableNameSuffixHash: true
+secretGenerator:
+  - name: kb-secrets
+    envs:
+      - .env
+images:
+  - name: kb-gateway
+    newName: ghcr.io/replace-me-owner/kb-gateway
+    newTag: latest
+  - name: kb-index-service
+    newName: ghcr.io/replace-me-owner/kb-index-service
+    newTag: latest
+  - name: kb-doc-service
+    newName: ghcr.io/replace-me-owner/kb-doc-service
+    newTag: latest
+  - name: kb-ai-service
+    newName: ghcr.io/replace-me-owner/kb-ai-service
+    newTag: latest
+  - name: kb-eureka-server
+    newName: ghcr.io/replace-me-owner/kb-eureka-server
+    newTag: latest
+  - name: kb-embedder
+    newName: ghcr.io/replace-me-owner/kb-embedder
+    newTag: latest
+  - name: kb-ocr-service
+    newName: ghcr.io/replace-me-owner/kb-ocr-service
+    newTag: latest

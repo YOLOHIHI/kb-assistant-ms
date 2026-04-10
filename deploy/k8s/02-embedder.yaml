@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kb-embedder
+  namespace: kb-assistant
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kb-embedder
+  template:
+    metadata:
+      labels:
+        app: kb-embedder
+    spec:
+      containers:
+        - name: kb-embedder
+          image: kb-embedder:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8090
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "1024Mi"
+            limits:
+              cpu: "2000m"
+              memory: "4096Mi"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8090
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8090
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          env:
+            - name: EMBED_MODEL
+              value: "BAAI/bge-small-zh-v1.5"
+            - name: EMBED_DEVICE
+              value: "cpu"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kb-embedder
+  namespace: kb-assistant
+spec:
+  selector:
+    app: kb-embedder
+  ports:
+    - name: http
+      port: 8090
+      targetPort: 8090

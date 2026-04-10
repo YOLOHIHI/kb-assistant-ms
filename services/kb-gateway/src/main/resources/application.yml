@@ -1,0 +1,66 @@
+server:
+  port: ${SERVER_PORT:8080}
+  error:
+    include-message: always
+  servlet:
+    session:
+      cookie:
+        same-site: lax
+        http-only: true
+    encoding:
+      charset: UTF-8
+      force: true
+      force-response: true
+
+kb:
+  allowInsecureDefaults: ${KB_ALLOW_INSECURE_DEFAULTS:false}
+  internalToken: ${KB_INTERNAL_TOKEN:dev-internal-token}
+  aiUrl: ${KB_AI_URL:http://localhost:8083}
+  docUrl: ${KB_DOC_URL:http://localhost:8081}
+  indexUrl: ${KB_INDEX_URL:http://localhost:8082}
+
+security:
+  bootstrapAdminUser: ${KB_BOOTSTRAP_ADMIN_USER:}
+  bootstrapAdminPassword: ${KB_BOOTSTRAP_ADMIN_PASSWORD:}
+
+crypto:
+  masterKey: ${KB_CRYPTO_MASTER_KEY:}
+
+spring:
+  config:
+    import: optional:file:.env[.properties],optional:file:../../.env[.properties]
+  datasource:
+    url: ${KB_DB_URL:jdbc:postgresql://localhost:5432/kb}
+    username: ${KB_DB_USER:kb}
+    password: ${KB_DB_PASSWORD:kb}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  web:
+    resources:
+      cache:
+        cachecontrol:
+          no-cache: true
+  application:
+    name: kb-gateway
+
+logging:
+  level:
+    root: INFO
+
+eureka:
+  client:
+    enabled: ${EUREKA_ENABLED:false}
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761}/eureka/
+  instance:
+    prefer-ip-address: true

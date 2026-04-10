@@ -1,0 +1,84 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kb-postgres-pvc
+  namespace: kb-assistant
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kb-postgres
+  namespace: kb-assistant
+spec:
+  serviceName: kb-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kb-postgres
+  template:
+    metadata:
+      labels:
+        app: kb-postgres
+    spec:
+      containers:
+        - name: kb-postgres
+          image: pgvector/pgvector:pg16
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+          env:
+            - name: POSTGRES_DB
+              value: "kb"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: kb-secrets
+                  key: KB_DB_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kb-secrets
+                  key: KB_DB_PASSWORD
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "kb", "-d", "kb"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "kb", "-d", "kb"]
+            initialDelaySeconds: 30
+            periodSeconds: 20
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: kb-postgres-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kb-postgres
+  namespace: kb-assistant
+spec:
+  selector:
+    app: kb-postgres
+  clusterIP: None
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432

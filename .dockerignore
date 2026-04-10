@@ -1,0 +1,14 @@
+.git
+.github
+.idea
+**/target
+**/.next
+**/out
+**/node_modules
+**/.venv
+**/venv
+**/__pycache__
+data
+logs
+gateway-run.log
+gateway-run.err.log

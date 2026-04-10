@@ -1,0 +1,11 @@
+{
+  "name": "kb-assistant-frontends",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build:all": "pnpm --filter @kb/chat run build && pnpm --filter @kb/admin run build && pnpm --filter @kb/home run build",
+    "dev:chat": "pnpm --filter @kb/chat run dev",
+    "dev:admin": "pnpm --filter @kb/admin run dev",
+    "dev:home": "pnpm --filter @kb/home run dev"
+  }
+}

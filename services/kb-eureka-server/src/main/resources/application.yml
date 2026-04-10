@@ -1,0 +1,25 @@
+server:
+  port: ${SERVER_PORT:8761}
+
+spring:
+  config:
+    import: optional:file:.env[.properties],optional:file:../../.env[.properties]
+  application:
+    name: kb-eureka-server
+
+eureka:
+  client:
+    registerWithEureka: false
+    fetchRegistry: false
+  server:
+    enableSelfPreservation: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    root: INFO

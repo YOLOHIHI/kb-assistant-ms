@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kb-index-service
+  namespace: kb-assistant
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kb-index-service
+  template:
+    metadata:
+      labels:
+        app: kb-index-service
+    spec:
+      containers:
+        - name: kb-index-service
+          image: kb-index-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8082
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "768Mi"
+          readinessProbe:
+            httpGet:
+              path: /internal/health
+              port: 8082
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /internal/health
+              port: 8082
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          env:
+            - name: KB_INTERNAL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: kb-secrets
+                  key: KB_INTERNAL_TOKEN
+            - name: KB_GATEWAY_URL
+              value: "http://kb-gateway:8080"
+            - name: KB_EMBEDDER_URL
+              value: "http://kb-embedder:8090"
+            - name: KB_DB_URL
+              value: "jdbc:postgresql://kb-postgres:5432/kb"
+            - name: KB_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: kb-secrets
+                  key: KB_DB_USER
+            - name: KB_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kb-secrets
+                  key: KB_DB_PASSWORD
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kb-index-service
+  namespace: kb-assistant
+spec:
+  selector:
+    app: kb-index-service
+  ports:
+    - name: http
+      port: 8082
+      targetPort: 8082

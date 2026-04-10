@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kb-eureka-server
+  namespace: kb-assistant
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kb-eureka-server
+  template:
+    metadata:
+      labels:
+        app: kb-eureka-server
+    spec:
+      containers:
+        - name: kb-eureka-server
+          image: kb-eureka-server:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8761
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "256Mi"
+            limits:
+              cpu: "300m"
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8761
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8761
+            initialDelaySeconds: 40
+            periodSeconds: 20
+          env:
+            - name: SERVER_PORT
+              value: "8761"
+            - name: EUREKA_ENABLED
+              value: "false"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kb-eureka-server
+  namespace: kb-assistant
+spec:
+  selector:
+    app: kb-eureka-server
+  ports:
+    - name: http
+      port: 8761
+      targetPort: 8761

@@ -1,0 +1,43 @@
+version: "3.9"
+
+# ──────────────────────────────────────────────────────────────────
+# Local-development PostgreSQL for kb-assistant-ms
+# Usage:
+#   docker compose -f docker-compose.dev.yml up -d   # start DB
+#   docker compose -f docker-compose.dev.yml down     # stop DB
+#   docker compose -f docker-compose.dev.yml down -v  # stop + wipe data
+#
+# After the DB is running, start each service from your IDE or via:
+#   mvn spring-boot:run -pl services/kb-gateway
+#   mvn spring-boot:run -pl services/kb-ai-service
+#   mvn spring-boot:run -pl services/kb-index-service
+#
+# All services default to:
+#   url: jdbc:postgresql://localhost:5432/kb
+#   username: kb   password: kb
+# ──────────────────────────────────────────────────────────────────
+services:
+  postgres:
+    # pgvector/pgvector:pg16 is used in production for vector search.
+    # For local development, postgres:16-alpine suffices: the V1 migration
+    # gracefully skips the vector extension when it is not available,
+    # and IndexService falls back to BM25-only search automatically.
+    image: postgres:16-alpine
+    container_name: kb-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: kb
+      POSTGRES_USER: kb
+      POSTGRES_PASSWORD: kb
+    ports:
+      - "5432:5432"
+    volumes:
+      - kb-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kb -d kb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  kb-db-data:

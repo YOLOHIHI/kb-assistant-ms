@@ -1,0 +1,20 @@
+CREATE TABLE tenant (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        VARCHAR(100) NOT NULL,
+  slug        VARCHAR(64) NOT NULL UNIQUE,
+  invite_code VARCHAR(32) NOT NULL UNIQUE,
+  enabled     BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+INSERT INTO tenant(id, name, slug, invite_code)
+  VALUES ('00000000-0000-0000-0000-000000000001', '默认组织', 'default', 'DEFAULT');
+
+ALTER TABLE app_user
+  ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES tenant(id)
+    DEFAULT '00000000-0000-0000-0000-000000000001',
+  ADD COLUMN IF NOT EXISTS is_tenant_admin BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE kb_kb_settings
+  ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES tenant(id);

@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kb-gateway
+  namespace: kb-assistant
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kb-gateway
+  template:
+    metadata:
+      labels:
+        app: kb-gateway
+    spec:
+      containers:
+        - name: kb-gateway
+          image: kb-gateway:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "300m"
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          env:
+            - name: KB_INTERNAL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: kb-secrets
+                  key: KB_INTERNAL_TOKEN
+            - name: KB_DB_URL
+              value: "jdbc:postgresql://kb-postgres:5432/kb"
+            - name: KB_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: kb-secrets
+                  key: KB_DB_USER
+            - name: KB_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kb-secrets
+                  key: KB_DB_PASSWORD
+            - name: KB_BOOTSTRAP_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: kb-secrets
+                  key: KB_BOOTSTRAP_ADMIN_USER
+            - name: KB_BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kb-secrets
+                  key: KB_BOOTSTRAP_ADMIN_PASSWORD
+            - name: KB_CRYPTO_MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: kb-secrets
+                  key: KB_CRYPTO_MASTER_KEY
+            - name: KB_AI_URL
+              value: "http://kb-ai-service:8083"
+            - name: KB_DOC_URL
+              value: "http://kb-doc-service:8081"
+            - name: KB_INDEX_URL
+              value: "http://kb-index-service:8082"
+            - name: KB_GATEWAY_URL
+              value: "http://kb-gateway:8080"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kb-gateway
+  namespace: kb-assistant
+spec:
+  selector:
+    app: kb-gateway
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+  type: NodePort

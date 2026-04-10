@@ -1,0 +1,17 @@
+# syntax=docker/dockerfile:1.7
+
+FROM maven:3.9.9-eclipse-temurin-21 AS build
+WORKDIR /workspace
+COPY pom.xml .
+COPY services services
+RUN --mount=type=cache,target=/root/.m2 mvn -q -DskipTests -pl services/kb-ai-service -am package
+
+FROM eclipse-temurin:21-jre AS runtime
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl \
+ && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --from=build /workspace/services/kb-ai-service/target/kb-ai-service-*.jar app.jar
+EXPOSE 8083
+ENV JAVA_OPTS=""
+ENTRYPOINT ["sh","-c","java $JAVA_OPTS -jar /app/app.jar"]

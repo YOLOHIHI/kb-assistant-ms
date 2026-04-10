@@ -1,0 +1,46 @@
+server:
+  port: 8083
+
+spring:
+  config:
+    import: optional:file:.env[.properties],optional:file:../../.env[.properties]
+  datasource:
+    url: ${KB_DB_URL:jdbc:postgresql://localhost:5432/kb}
+    username: ${KB_DB_USER:kb}
+    password: ${KB_DB_PASSWORD:kb}
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 30000
+  jpa:
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        default_schema: ai
+  flyway:
+    locations: classpath:db/migration
+    schemas: ai
+  application:
+    name: kb-ai-service
+
+kb:
+  internalToken: ${KB_INTERNAL_TOKEN:dev-internal-token}
+  indexUrl: ${KB_INDEX_URL:http://localhost:8082}
+
+siliconflow:
+  baseUrl: ${SILICONFLOW_BASE_URL:https://api.siliconflow.cn/v1}
+  apiKey: ${SILICONFLOW_API_KEY:}
+  model: ${SILICONFLOW_MODEL:}
+  temperature: 0.2
+
+logging:
+  level:
+    root: INFO
+
+eureka:
+  client:
+    enabled: ${EUREKA_ENABLED:false}
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761}/eureka/
+  instance:
+    prefer-ip-address: true

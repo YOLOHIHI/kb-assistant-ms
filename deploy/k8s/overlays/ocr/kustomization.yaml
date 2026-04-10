@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../demo
+  - ocr.yaml
+patches:
+  - path: doc-ocr-patch.yaml
+images:
+  - name: kb-ocr-service
+    newName: ghcr.io/replace-me-owner/kb-ocr-service
+    newTag: latest

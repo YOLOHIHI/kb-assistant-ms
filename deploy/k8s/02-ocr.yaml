@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kb-ocr-service
+  namespace: kb-assistant
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kb-ocr-service
+  template:
+    metadata:
+      labels:
+        app: kb-ocr-service
+    spec:
+      containers:
+        - name: kb-ocr-service
+          image: kb-ocr-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8070
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "2048Mi"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8070
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8070
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          env:
+            - name: OCR_LANG
+              value: "chi_sim+eng"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kb-ocr-service
+  namespace: kb-assistant
+spec:
+  selector:
+    app: kb-ocr-service
+  ports:
+    - name: http
+      port: 8070
+      targetPort: 8070

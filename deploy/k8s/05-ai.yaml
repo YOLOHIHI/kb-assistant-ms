@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kb-ai-service
+  namespace: kb-assistant
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kb-ai-service
+  template:
+    metadata:
+      labels:
+        app: kb-ai-service
+    spec:
+      containers:
+        - name: kb-ai-service
+          image: kb-ai-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8083
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1536Mi"
+          readinessProbe:
+            httpGet:
+              path: /internal/health
+              port: 8083
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /internal/health
+              port: 8083
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          env:
+            - name: KB_INTERNAL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: kb-secrets
+                  key: KB_INTERNAL_TOKEN
+            - name: KB_INDEX_URL
+              value: "http://kb-index-service:8082"
+            - name: KB_DB_URL
+              value: "jdbc:postgresql://kb-postgres:5432/kb"
+            - name: KB_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: kb-secrets
+                  key: KB_DB_USER
+            - name: KB_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kb-secrets
+                  key: KB_DB_PASSWORD
+            - name: SILICONFLOW_BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: kb-secrets
+                  key: SILICONFLOW_BASE_URL
+            - name: SILICONFLOW_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: kb-secrets
+                  key: SILICONFLOW_API_KEY
+            - name: SILICONFLOW_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: kb-secrets
+                  key: SILICONFLOW_MODEL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kb-ai-service
+  namespace: kb-assistant
+spec:
+  selector:
+    app: kb-ai-service
+  ports:
+    - name: http
+      port: 8083
+      targetPort: 8083

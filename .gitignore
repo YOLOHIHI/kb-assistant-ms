@@ -1,0 +1,46 @@
+# Maven
+**/target/
+
+# Logs
+*.log
+**/logs/
+
+# Smoke / local diagnostics
+artifacts/
+
+# Local run state
+run/
+
+# Local data
+**/data/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+**/__pycache__/
+**/*.pyc
+.venv/
+
+# IDE
+.idea/
+.m2/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 前端构建产物（由 build.ps1 生成，勿手动提交）
+services/kb-gateway/src/main/resources/static/admin/
+services/kb-gateway/src/main/resources/static/chat-app/
+services/kb-gateway/src/main/resources/static/_next/
+services/kb-gateway/src/main/resources/static/index.html
+services/kb-gateway/src/main/resources/static/index.txt
+services/kb-gateway/src/main/resources/static/404.html
+
+# Frontend (pnpm workspace)
+**/node_modules/
+**/.next/
+**/out/
