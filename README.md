@@ -154,16 +154,100 @@ mvn -DskipTests package
 - 如果 `kb-gateway` 启动时报 `KB_INTERNAL_TOKEN is using an insecure development default`，说明本地 `.env` 没有生效，先确认工作目录是仓库根目录并重新复制 `.env.example`。
 - 如果 IDEA 打开项目时弹出“链接数据库”并连接失败，请先确保 `.\scripts\ensure-postgres.ps1` 或 `docker compose -f docker-compose.dev.yml up -d` 已成功启动本地库；连接参数应为 `host=localhost`、`port=5432`、`database=kb`、`user=kb`、`password=kb`。
 
-### 方式二：Docker Compose
+### 方式二：Docker Compose（推荐用于本地演示）
 
-```powershell
-cd .\kb-assistant-ms\deploy\docker
-Copy-Item .\.env.example .\.env
-# 按需编辑 .env
-docker compose up -d --build
+#### 前置条件
+
+- 已安装并启动 Docker Desktop
+
+---
+
+#### 第一步：创建配置文件
+
+1. 用资源管理器打开项目目录 `deploy/docker/`
+2. 找到文件 `.env.example`，**右键 → 复制**，再**右键 → 粘贴**，得到一个副本
+3. 将副本**重命名**为 `.env`（把 `.example` 后缀删掉）
+   > Windows 如果提示"更改扩展名可能导致文件不可用"，点**是**
+   > 如果看不到扩展名，在资源管理器顶部勾选"查看 → 显示 → 文件扩展名"
+
+4. **右键 `.env` → 打开方式 → 记事本**
+
+---
+
+#### 第二步：填写配置
+
+用记事本打开后，逐项修改以下内容（其余行不用动）：
+
+```
+# 本地测试必须设为 true，否则启动会报安全校验错误
+KB_ALLOW_INSECURE_DEFAULTS=true
+
+# 数据库密码，自定义，记住就行
+KB_DB_PASSWORD=自定义密码
+
+# 管理员账号，等会登录后台用这个
+KB_BOOTSTRAP_ADMIN_USER=admin
+KB_BOOTSTRAP_ADMIN_PASSWORD=自定义密码
+
+# 加密主密钥，随便填一串字符，但必须达到32个字符
+KB_CRYPTO_MASTER_KEY=随便填满32个字符例如aaabbbccc123456789
+
+# 服务间通信令牌，随便填一串字符即可
+KB_INTERNAL_TOKEN=随便填
 ```
 
-部署细节见 `deploy/docker/README.md`。
+**关于大模型（可选）：**
+
+```
+# 如果你有 SiliconFlow 的 API Key，填在这里，聊天才能得到 AI 回答
+# 没有就留空，聊天会直接返回检索到的原文片段
+SILICONFLOW_API_KEY=
+SILICONFLOW_MODEL=
+```
+
+填完后 **Ctrl+S 保存，关闭记事本**。
+
+---
+
+#### 第三步：启动服务
+
+在 `deploy/docker/` 目录下打开 PowerShell，运行：
+
+```powershell
+docker compose -f docker-compose.ghcr.yml up -d
+```
+
+> 这条命令使用已发布的预构建镜像，**无需本地编译**，首次启动约 3~5 分钟。
+>
+> 如需从本地源码编译（速度较慢），改用：`docker compose up -d --build`
+
+---
+
+#### 第四步：等待启动完成
+
+Docker Desktop 中可以看到 6 个容器逐渐变绿（状态变为 running）。
+
+全部变绿后，浏览器访问以下地址验证：
+
+```
+http://localhost:8080/api/health
+```
+
+返回内容包含 `"status":"UP"` 即表示启动成功。
+
+---
+
+#### 访问地址与登录
+
+| 页面 | 地址 |
+| --- | --- |
+| 首页 | http://localhost:8080/ |
+| 聊天页 | http://localhost:8080/chat |
+| 管理后台 | http://localhost:8080/admin |
+
+**登录账号**：用你在 `.env` 里填写的 `KB_BOOTSTRAP_ADMIN_USER` 和 `KB_BOOTSTRAP_ADMIN_PASSWORD`。
+
+> 更多部署细节见 `deploy/docker/README.md`。
 
 ### 方式三：Kubernetes（GHCR + Kustomize）
 
