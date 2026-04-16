@@ -29,6 +29,13 @@ kb:
   embedderUrl: ${KB_EMBEDDER_URL:http://localhost:8090}
   embedApiBaseUrl: ${KB_EMBED_API_BASE_URL:}
   embedApiKey: ${KB_EMBED_API_KEY:}
+  embedder:
+    mode: ${KB_EMBEDDER_MODE:djl}
+    model: ${KB_EMBEDDER_MODEL:Xenova/bge-small-zh-v1.5}
+    cacheDir: ${KB_EMBEDDER_CACHE_DIR:}
+    maxLength: ${KB_EMBEDDER_MAX_LENGTH:512}
+    pooling: ${KB_EMBEDDER_POOLING:cls}
+    normalize: ${KB_EMBEDDER_NORMALIZE:true}
 
 index:
   bm25:

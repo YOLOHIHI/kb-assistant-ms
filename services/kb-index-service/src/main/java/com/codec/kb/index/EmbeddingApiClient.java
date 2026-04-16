@@ -3,6 +3,7 @@ package com.codec.kb.index;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import jakarta.annotation.PreDestroy;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
@@ -26,6 +27,11 @@ public final class EmbeddingApiClient {
     this.http = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(10))
         .build();
+  }
+
+  @PreDestroy
+  public void close() {
+    http.close();
   }
 
   public List<float[]> embed(String baseUrl, String apiKey, String model, List<String> texts) {

@@ -9,10 +9,10 @@ $root = Resolve-Path (Join-Path $PSScriptRoot '..')
 $composeFile = Join-Path $root 'docker-compose.dev.yml'
 
 function Test-TcpPort {
-    param([string]$Host = 'localhost', [int]$Port = 5432, [int]$TimeoutMs = 2000)
+    param([string]$Hostname = 'localhost', [int]$Port = 5432, [int]$TimeoutMs = 2000)
     try {
         $client = New-Object System.Net.Sockets.TcpClient
-        $result = $client.BeginConnect($Host, $Port, $null, $null)
+        $result = $client.BeginConnect($Hostname, $Port, $null, $null)
         $success = $result.AsyncWaitHandle.WaitOne($TimeoutMs)
         if ($success) { $client.EndConnect($result) }
         $client.Close()

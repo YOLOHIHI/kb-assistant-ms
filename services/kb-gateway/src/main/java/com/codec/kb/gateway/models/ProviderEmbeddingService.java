@@ -4,6 +4,8 @@ import com.codec.kb.common.ManagedEmbeddingResponse;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -22,6 +24,7 @@ import java.util.Map;
 
 @Service
 public class ProviderEmbeddingService {
+  private static final Logger log = LoggerFactory.getLogger(ProviderEmbeddingService.class);
   private final AiModelResolverService resolver;
   private final ObjectMapper om;
   private final HttpClient http;
@@ -36,6 +39,7 @@ public class ProviderEmbeddingService {
 
   public ManagedEmbeddingResponse embedByModelRef(String modelRef, List<String> texts) {
     ArrayList<String> input = new ArrayList<>();
+    long startedAt = System.nanoTime();
     if (texts != null) {
       for (String text : texts) {
         input.add(text == null ? "" : text);
@@ -49,6 +53,13 @@ public class ProviderEmbeddingService {
     if (cfg == null) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "embedding model unavailable");
     }
+    log.info(
+        "Provider embedding request started modelRef={} provider={} model={} texts={}",
+        modelRef,
+        cfg.providerName(),
+        cfg.modelId(),
+        input.size()
+    );
 
     Map<String, Object> body = new LinkedHashMap<>();
     body.put("model", cfg.modelId());
@@ -81,8 +92,26 @@ public class ProviderEmbeddingService {
       }
       json = success.body();
     } catch (ResponseStatusException e) {
+      log.warn(
+          "Provider embedding request failed modelRef={} provider={} model={} texts={} elapsedMs={} reason={}",
+          modelRef,
+          cfg.providerName(),
+          cfg.modelId(),
+          input.size(),
+          elapsedMillis(startedAt),
+          e.getReason()
+      );
       throw e;
     } catch (Exception e) {
+      log.warn(
+          "Provider embedding request failed modelRef={} provider={} model={} texts={} elapsedMs={} reason={}",
+          modelRef,
+          cfg.providerName(),
+          cfg.modelId(),
+          input.size(),
+          elapsedMillis(startedAt),
+          e.getMessage()
+      );
       throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Embedding API request failed: " + e.getMessage());
     }
 
@@ -119,10 +148,37 @@ public class ProviderEmbeddingService {
         }
         vectors.add(out[i]);
       }
+      log.info(
+          "Provider embedding request completed modelRef={} provider={} model={} texts={} vectors={} elapsedMs={}",
+          modelRef,
+          cfg.providerName(),
+          cfg.modelId(),
+          input.size(),
+          vectors.size(),
+          elapsedMillis(startedAt)
+      );
       return new ManagedEmbeddingResponse(cfg.providerName(), cfg.modelId(), vectors);
     } catch (ResponseStatusException e) {
+      log.warn(
+          "Provider embedding response parse failed modelRef={} provider={} model={} texts={} elapsedMs={} reason={}",
+          modelRef,
+          cfg.providerName(),
+          cfg.modelId(),
+          input.size(),
+          elapsedMillis(startedAt),
+          e.getReason()
+      );
       throw e;
     } catch (Exception e) {
+      log.warn(
+          "Provider embedding response parse failed modelRef={} provider={} model={} texts={} elapsedMs={} reason={}",
+          modelRef,
+          cfg.providerName(),
+          cfg.modelId(),
+          input.size(),
+          elapsedMillis(startedAt),
+          e.getMessage()
+      );
       throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Failed to parse Embedding API response: " + e.getMessage());
     }
   }
@@ -146,5 +202,9 @@ public class ProviderEmbeddingService {
     if (value == null) return "";
     if (value.length() <= max) return value;
     return value.substring(0, max) + "...";
+  }
+
+  private static long elapsedMillis(long startedAt) {
+    return (System.nanoTime() - startedAt) / 1_000_000L;
   }
 }

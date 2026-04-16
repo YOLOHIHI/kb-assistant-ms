@@ -20,16 +20,18 @@ public interface ChunkJpaRepository extends JpaRepository<ChunkEntity, String> {
   void deleteByKbId(@Param("kbId") String kbId);
 
   /**
-   * pgvector approximate nearest-neighbor search.
-   * embedding column is TEXT; cast to vector at query time (requires pgvector extension).
-   * If pgvector is not installed this query will throw; IndexService catches and falls back to BM25.
+   * Native pgvector dense search.
+   * The column uses pgvector's vector type directly, while the incoming query string
+   * is cast once at the SQL boundary.
    */
   @Query(value = """
       SELECT id, doc_id, kb_id, chunk_index, content, source_hint,
-             1 - (CAST(embedding AS vector) <=> CAST(:queryVec AS vector)) AS score
+             1 - (embedding <=> CAST(:queryVec AS vector)) AS score
       FROM idx.chunks
-      WHERE kb_id = :kbId AND embedding IS NOT NULL
-      ORDER BY CAST(embedding AS vector) <=> CAST(:queryVec AS vector)
+      WHERE kb_id = :kbId
+        AND embedding IS NOT NULL
+        AND vector_dims(embedding) = vector_dims(CAST(:queryVec AS vector))
+      ORDER BY embedding <=> CAST(:queryVec AS vector)
       LIMIT :topK
       """, nativeQuery = true)
   List<Object[]> findTopKByDenseSimilarity(
@@ -40,4 +42,7 @@ public interface ChunkJpaRepository extends JpaRepository<ChunkEntity, String> {
 
   @Query(value = "SELECT COUNT(*) FROM idx.chunks WHERE kb_id = :kbId", nativeQuery = true)
   long countByKbId(@Param("kbId") String kbId);
+
+  @Query(value = "SELECT COUNT(*) FROM idx.chunks WHERE kb_id = :kbId AND embedding IS NOT NULL", nativeQuery = true)
+  long countByKbIdAndEmbeddingIsNotNull(@Param("kbId") String kbId);
 }

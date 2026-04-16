@@ -101,14 +101,12 @@ public class IndexController {
 
   @PostMapping("/internal/reindex")
   public Map<String, Object> reindex() {
-    svc.reindexAllEmbeddings();
-    return Map.of("ok", true);
+    return svc.reindexAllEmbeddings();
   }
 
   @PostMapping("/internal/kbs/{kbId}/reindex")
   public Map<String, Object> reindex(@PathVariable("kbId") String kbId) {
-    svc.reindexAllEmbeddings(kbId);
-    return Map.of("ok", true);
+    return svc.reindexAllEmbeddings(kbId);
   }
 
   @GetMapping("/internal/stats")

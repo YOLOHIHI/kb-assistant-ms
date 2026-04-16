@@ -5,14 +5,17 @@ import java.util.function.Supplier;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
+import org.springframework.core.annotation.Order;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.context.annotation.Bean;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
@@ -35,6 +38,19 @@ public class SecurityConfig {
   }
 
   @Bean
+  @Order(1)
+  SecurityFilterChain internalFilterChain(HttpSecurity http, GatewayConfig gatewayConfig) throws Exception {
+    http.securityMatcher("/internal/**");
+    http.csrf(csrf -> csrf.disable());
+    http.sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
+    http.authorizeHttpRequests(auth -> auth.anyRequest().hasRole("INTERNAL"));
+    http.addFilterBefore(new InternalTokenAuthenticationFilter(gatewayConfig), BasicAuthenticationFilter.class);
+    http.httpBasic(httpBasic -> httpBasic.disable());
+    return http.build();
+  }
+
+  @Bean
+  @Order(2)
   SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
     http.csrf(csrf -> csrf
         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())

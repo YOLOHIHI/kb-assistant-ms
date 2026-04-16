@@ -3,6 +3,8 @@ package com.codec.kb.index;
 import jakarta.persistence.*;
 import java.time.Instant;
 
+import org.hibernate.annotations.ColumnTransformer;
+
 @Entity
 @Table(name = "chunks", schema = "idx")
 public class ChunkEntity {
@@ -26,11 +28,12 @@ public class ChunkEntity {
   private String sourceHint;
 
   /**
-   * Stored as pgvector's vector(512) type.
+   * Stored as pgvector's native vector type.
    * FloatArrayConverter serializes float[] ↔ "[0.1,0.2,...]".
    */
   @Convert(converter = FloatArrayConverter.class)
-  @Column(columnDefinition = "TEXT")
+  @Column(columnDefinition = "vector")
+  @ColumnTransformer(read = "embedding::text", write = "?::vector")
   private float[] embedding;
 
   @Column(name = "created_at", nullable = false)

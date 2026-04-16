@@ -27,7 +27,12 @@ import {
   normalizeKnowledgeBases,
   reindexScopedKb,
   uploadScopedKbDocument,
+  uploadScopedKbDocuments,
 } from "@/lib/admin-api"
+import {
+  buildKbMetaLines,
+  resolveUploadMode,
+} from "@/lib/knowledge-base-section-utils.mjs"
 
 const EMPTY_STATS = {
   documents: 0,
@@ -210,16 +215,38 @@ export default function KnowledgeBaseSection({ enabled, currentUser, onUnauthori
   }
 
   const handleUpload = async (event) => {
-    const file = event.target.files?.[0]
-    if (!file || !selectedKbId) return
+    const files = Array.from(event.target.files || [])
+    const uploadMode = resolveUploadMode(files)
+    if (uploadMode === "none" || !selectedKbId) return
 
     setUploading(true)
     setStatusMessage("")
     setError("")
 
     try {
-      await uploadScopedKbDocument(currentUser, selectedKbId, file)
-      setStatusMessage(`已上传 ${file.name}`)
+      if (uploadMode === "single") {
+        await uploadScopedKbDocument(currentUser, selectedKbId, files[0])
+        setStatusMessage(`已上传 ${files[0].name}`)
+      } else {
+        const response = await uploadScopedKbDocuments(currentUser, selectedKbId, files)
+        const results = Array.isArray(response?.results) ? response.results : []
+        const successCount = results.filter((item) => item?.status === "ok").length
+        const failed = results.filter((item) => item?.status === "error")
+
+        setStatusMessage(
+          failed.length === 0
+            ? `已批量上传 ${successCount} 个文件`
+            : `批量上传完成：成功 ${successCount}，失败 ${failed.length}`
+        )
+        if (failed.length > 0) {
+          const firstFailed = failed[0]
+          setError(
+            `部分文件上传失败：${firstFailed?.filename || "未知文件"} - ${
+              firstFailed?.error || "unknown"
+            }`
+          )
+        }
+      }
       await loadKbDetails(selectedKbId)
       await loadBaseData(selectedKbId)
     } catch (uploadError) {
@@ -416,9 +443,16 @@ export default function KnowledgeBaseSection({ enabled, currentUser, onUnauthori
                       </span>
                     )}
                   </div>
-                  <p className="mt-0.5 text-xs opacity-60">
-                    {kb.embeddingMode === "local" ? "本地嵌入" : `云端 · ${kb.embeddingModel || "未指定"}`}
-                  </p>
+                  {buildKbMetaLines(kb).map((line, index) => (
+                    <p
+                      key={`${kb.id}_${index}`}
+                      className={`mt-0.5 text-xs ${
+                        index === 1 ? "break-all font-mono opacity-50" : "opacity-60"
+                      }`}
+                    >
+                      {line}
+                    </p>
+                  ))}
                 </motion.button>
               ))}
             </div>
@@ -470,6 +504,7 @@ export default function KnowledgeBaseSection({ enabled, currentUser, onUnauthori
                 <input
                   ref={fileInputRef}
                   type="file"
+                  multiple
                   className="hidden"
                   onChange={handleUpload}
                 />
@@ -482,12 +517,6 @@ export default function KnowledgeBaseSection({ enabled, currentUser, onUnauthori
                   <tr className="border-b border-zinc-200/60 dark:border-zinc-800">
                     <th className="pb-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500">
                       文件名
-                    </th>
-                    <th className="pb-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500">
-                      分类
-                    </th>
-                    <th className="pb-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500">
-                      标签
                     </th>
                     <th className="pb-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500">
                       上传时间
@@ -515,22 +544,6 @@ export default function KnowledgeBaseSection({ enabled, currentUser, onUnauthori
                           <div className="flex items-center gap-2">
                             <FileText className="h-4 w-4 text-zinc-400" />
                             <span className="font-medium">{doc.name}</span>
-                          </div>
-                        </td>
-                        <td className="py-3 text-zinc-600 dark:text-zinc-400">
-                          {doc.category || "-"}
-                        </td>
-                        <td className="py-3">
-                          <div className="flex flex-wrap gap-1">
-                            {(doc.tags || []).map((tag) => (
-                              <span
-                                key={`${doc.id}_${tag}`}
-                                className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs dark:bg-zinc-800"
-                              >
-                                {tag}
-                              </span>
-                            ))}
-                            {!doc.tags?.length && <span className="text-xs text-zinc-400">-</span>}
                           </div>
                         </td>
                         <td className="py-3 text-sm text-zinc-500">

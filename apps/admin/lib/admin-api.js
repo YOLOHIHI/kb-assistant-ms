@@ -294,6 +294,24 @@ export async function uploadAdminKbDocument(id, file, extra = {}) {
   })
 }
 
+export async function uploadAdminKbDocuments(id, files, extra = {}) {
+  const body = new FormData()
+  for (const file of files || []) {
+    if (!file) continue
+    body.append("files", file, file.name)
+  }
+
+  const category = String(extra.category || "").trim()
+  const tags = String(extra.tags || "").trim()
+  if (category) body.append("category", category)
+  if (tags) body.append("tags", tags)
+
+  return apiFetch(`/api/admin/kbs/${encodeURIComponent(id)}/documents/batch`, {
+    method: "POST",
+    body,
+  })
+}
+
 export async function uploadTenantKbDocument(id, file, extra = {}) {
   const body = new FormData()
   body.append("file", file, file.name)
@@ -307,6 +325,29 @@ export async function uploadTenantKbDocument(id, file, extra = {}) {
     method: "POST",
     body,
   })
+}
+
+export async function uploadTenantKbDocuments(id, files, extra = {}) {
+  const results = []
+  for (const file of files || []) {
+    if (!file) continue
+    try {
+      const result = await uploadTenantKbDocument(id, file, extra)
+      results.push({
+        filename: file.name || "",
+        status: "ok",
+        result: result ?? {},
+      })
+    } catch (error) {
+      if (isUnauthorizedError(error)) throw error
+      results.push({
+        filename: file.name || "",
+        status: "error",
+        error: error?.message || "unknown",
+      })
+    }
+  }
+  return { results }
 }
 
 export async function deleteAdminKbDocument(kbId, documentId) {
@@ -357,6 +398,12 @@ export async function uploadScopedKbDocument(user, id, file, extra = {}) {
   return isTenantAdminUser(user)
     ? uploadTenantKbDocument(id, file, extra)
     : uploadAdminKbDocument(id, file, extra)
+}
+
+export async function uploadScopedKbDocuments(user, id, files, extra = {}) {
+  return isTenantAdminUser(user)
+    ? uploadTenantKbDocuments(id, files, extra)
+    : uploadAdminKbDocuments(id, files, extra)
 }
 
 export async function deleteScopedKbDocument(user, kbId, documentId) {

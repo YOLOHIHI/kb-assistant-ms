@@ -3,7 +3,7 @@ package com.codec.kb.index;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import org.springframework.stereotype.Component;
+import jakarta.annotation.PreDestroy;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -14,13 +14,12 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
-@Component
-public final class EmbeddingClient {
+public final class HttpLocalEmbeddingBackend implements LocalEmbeddingBackend {
   private final IndexServiceConfig cfg;
   private final ObjectMapper om;
   private final HttpClient http;
 
-  public EmbeddingClient(IndexServiceConfig cfg, ObjectMapper om) {
+  public HttpLocalEmbeddingBackend(IndexServiceConfig cfg, ObjectMapper om) {
     this.cfg = cfg;
     this.om = om;
     this.http = HttpClient.newBuilder()
@@ -29,6 +28,12 @@ public final class EmbeddingClient {
         .build();
   }
 
+  @PreDestroy
+  public void close() {
+    http.close();
+  }
+
+  @Override
   public List<float[]> embed(List<String> texts) {
     if (texts == null || texts.isEmpty()) return List.of();
 

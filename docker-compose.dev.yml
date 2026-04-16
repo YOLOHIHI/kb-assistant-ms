@@ -1,5 +1,3 @@
-version: "3.9"
-
 # ──────────────────────────────────────────────────────────────────
 # Local-development PostgreSQL for kb-assistant-ms
 # Usage:
@@ -18,11 +16,9 @@ version: "3.9"
 # ──────────────────────────────────────────────────────────────────
 services:
   postgres:
-    # pgvector/pgvector:pg16 is used in production for vector search.
-    # For local development, postgres:16-alpine suffices: the V1 migration
-    # gracefully skips the vector extension when it is not available,
-    # and IndexService falls back to BM25-only search automatically.
-    image: postgres:16-alpine
+    # Local development also uses pgvector so dense retrieval works and
+    # embedding-effect evaluation matches the production path.
+    image: pgvector/pgvector:pg16
     container_name: kb-db
     restart: unless-stopped
     environment:
@@ -41,3 +37,4 @@ services:
 
 volumes:
   kb-db-data:
+    name: kb-db-data

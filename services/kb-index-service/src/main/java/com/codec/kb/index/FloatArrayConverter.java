@@ -5,7 +5,7 @@ import jakarta.persistence.Converter;
 
 /**
  * Converts float[] to pgvector string format "[0.1,0.2,...]" and back.
- * The physical column type is vector(512) in PostgreSQL.
+ * The physical column type is PostgreSQL pgvector's native vector type.
  */
 @Converter
 public class FloatArrayConverter implements AttributeConverter<float[], String> {

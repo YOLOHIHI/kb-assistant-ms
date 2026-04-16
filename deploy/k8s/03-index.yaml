@@ -48,6 +48,8 @@ spec:
               value: "http://kb-gateway:8080"
             - name: KB_EMBEDDER_URL
               value: "http://kb-embedder:8090"
+            - name: KB_EMBEDDER_MODE
+              value: "http"
             - name: KB_DB_URL
               value: "jdbc:postgresql://kb-postgres:5432/kb"
             - name: KB_DB_USER

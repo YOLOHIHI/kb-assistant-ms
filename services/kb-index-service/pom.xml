@@ -57,6 +57,27 @@
       <groupId>org.springframework.cloud</groupId>
       <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
     </dependency>
+
+    <!-- In-JVM embedding backend: DJL + HuggingFace tokenizers + ONNX Runtime.
+         Used when kb.embedder.mode=djl (default for local IDEA development).
+         Eliminates the runtime dependency on the separate Python kb-embedder
+         service; Docker/K8s deployments keep using kb-embedder by setting
+         KB_EMBEDDER_MODE=http. -->
+    <dependency>
+      <groupId>ai.djl</groupId>
+      <artifactId>api</artifactId>
+      <version>${djl.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>ai.djl.huggingface</groupId>
+      <artifactId>tokenizers</artifactId>
+      <version>${djl.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>ai.djl.onnxruntime</groupId>
+      <artifactId>onnxruntime-engine</artifactId>
+      <version>${djl.version}</version>
+    </dependency>
   </dependencies>
 
   <build>

@@ -21,14 +21,14 @@ import java.util.UUID;
 public class EmbeddingFacade {
   private final IndexServiceConfig cfg;
   private final KbJpaRepository kbRepo;
-  private final EmbeddingClient localEmbed;
+  private final LocalEmbeddingBackend localEmbed;
   private final EmbeddingApiClient apiEmbed;
   private final ManagedEmbeddingClient managedEmbed;
 
   public EmbeddingFacade(
       IndexServiceConfig cfg,
       KbJpaRepository kbRepo,
-      EmbeddingClient localEmbed,
+      LocalEmbeddingBackend localEmbed,
       EmbeddingApiClient apiEmbed,
       ManagedEmbeddingClient managedEmbed
   ) {

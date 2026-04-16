@@ -63,6 +63,7 @@ services:
       KB_INTERNAL_TOKEN: ${KB_INTERNAL_TOKEN:-change-me-internal-token}
       KB_GATEWAY_URL: ${KB_GATEWAY_URL:-http://kb-gateway:8080}
       KB_EMBEDDER_URL: ${KB_EMBEDDER_URL:-http://kb-embedder:8090}
+      KB_EMBEDDER_MODE: ${KB_EMBEDDER_MODE:-http}
       KB_DB_URL: jdbc:postgresql://kb-db:5432/${KB_DB_NAME:-kb}
       KB_DB_USER: ${KB_DB_USER:-kb}
       KB_DB_PASSWORD: ${KB_DB_PASSWORD:-kb-demo-password}

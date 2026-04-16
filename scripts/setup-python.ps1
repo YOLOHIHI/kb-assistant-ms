@@ -7,7 +7,8 @@
 param(
     [Parameter(Mandatory)]
     [ValidateSet('embedder', 'ocr')]
-    [string]$Service
+    [string]$Service,
+    [string]$PythonVersion = '3.12'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -30,34 +31,63 @@ if (-not (Test-Path $reqFile)) {
     exit 1
 }
 
-# Find python executable
-$python = $null
-foreach ($cmd in @('python3', 'python')) {
-    if (Get-Command $cmd -ErrorAction SilentlyContinue) {
-        $python = $cmd
-        break
+$uv = Get-Command 'uv' -ErrorAction SilentlyContinue
+if ($uv) {
+    Write-Host "[setup-python] Creating/updating venv with uv (Python $PythonVersion)..." -ForegroundColor Yellow
+    & $uv.Source venv --allow-existing --python $PythonVersion $venvDir
+    if ($LASTEXITCODE -ne 0) { Write-Error "uv venv failed."; exit 1 }
+} else {
+    # Fall back to system Python only when it is a compatible version.
+    $python = $null
+    foreach ($cmd in @('python3', 'python')) {
+        if (Get-Command $cmd -ErrorAction SilentlyContinue) {
+            $python = $cmd
+            break
+        }
+    }
+    if (-not $python) {
+        Write-Error "Python not found. Install uv or Python 3.11/3.12 and ensure it is in PATH."
+        exit 1
+    }
+
+    $versionText = & $python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Failed to detect Python version from '$python'."
+        exit 1
+    }
+    if ($versionText -notin @('3.11', '3.12')) {
+        Write-Error "Detected Python $versionText from '$python', but '$Service' requires Python 3.11/3.12. Install uv or a compatible Python first."
+        exit 1
+    }
+
+    if (-not (Test-Path $venvDir)) {
+        Write-Host "[setup-python] Creating venv with Python $versionText..." -ForegroundColor Yellow
+        & $python -m venv $venvDir
+        if ($LASTEXITCODE -ne 0) { Write-Error "Failed to create venv."; exit 1 }
     }
 }
-if (-not $python) {
-    Write-Error "Python not found. Please install Python 3.11+ and ensure it is in PATH."
+
+# Resolve venv executables
+$pythonExe = Join-Path $venvDir 'Scripts\python.exe'
+if (-not (Test-Path $pythonExe)) {
+    $pythonExe = Join-Path $venvDir 'bin/python'
+}
+if (-not (Test-Path $pythonExe)) {
+    Write-Error "Python executable not found in venv at $venvDir"
     exit 1
 }
 
-# Create venv if not exists
-if (-not (Test-Path $venvDir)) {
-    Write-Host "[setup-python] Creating venv..." -ForegroundColor Yellow
-    & $python -m venv $venvDir
-    if ($LASTEXITCODE -ne 0) { Write-Error "Failed to create venv."; exit 1 }
-}
-
-# Activate and install
-$pip = Join-Path $venvDir 'Scripts\pip.exe'
-if (-not (Test-Path $pip)) {
-    $pip = Join-Path $venvDir 'bin/pip'
-}
-
 Write-Host "[setup-python] Installing dependencies..." -ForegroundColor Yellow
-& $pip install -r $reqFile
-if ($LASTEXITCODE -ne 0) { Write-Error "pip install failed."; exit 1 }
+if ($uv) {
+    & $uv.Source pip install --python $pythonExe -r $reqFile
+    if ($LASTEXITCODE -ne 0) { Write-Error "uv pip install failed."; exit 1 }
+} else {
+    $pip = Join-Path $venvDir 'Scripts\pip.exe'
+    if (-not (Test-Path $pip)) {
+        $pip = Join-Path $venvDir 'bin/pip'
+    }
+    & $pip install -r $reqFile
+    if ($LASTEXITCODE -ne 0) { Write-Error "pip install failed."; exit 1 }
+}
 
-Write-Host "[setup-python] '$Service' environment ready." -ForegroundColor Green
+Write-Host "[setup-python] '$Service' environment ready with $pythonExe" -ForegroundColor Green

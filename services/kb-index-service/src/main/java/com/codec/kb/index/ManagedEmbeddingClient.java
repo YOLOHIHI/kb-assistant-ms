@@ -4,6 +4,9 @@ import com.codec.kb.common.ManagedEmbeddingRequest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import jakarta.annotation.PreDestroy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
@@ -17,6 +20,7 @@ import java.util.List;
 
 @Component
 public final class ManagedEmbeddingClient {
+  private static final Logger log = LoggerFactory.getLogger(ManagedEmbeddingClient.class);
   private final IndexServiceConfig cfg;
   private final ObjectMapper om;
   private final HttpClient http;
@@ -29,13 +33,20 @@ public final class ManagedEmbeddingClient {
         .build();
   }
 
+  @PreDestroy
+  public void close() {
+    http.close();
+  }
+
   public List<float[]> embed(String modelRef, List<String> texts) {
     if (texts == null || texts.isEmpty()) return List.of();
+    long startedAt = System.nanoTime();
 
     String gatewayUrl = trimSlash(cfg.gatewayUrl());
     if (gatewayUrl.isBlank()) {
       throw new IllegalStateException("Managed embedding requires KB_GATEWAY_URL");
     }
+    log.info("Managed embedding request started modelRef={} texts={} gatewayUrl={}", modelRef, texts.size(), gatewayUrl);
 
     final String json;
     try {
@@ -54,6 +65,13 @@ public final class ManagedEmbeddingClient {
       }
       json = resp.body();
     } catch (Exception e) {
+      log.warn(
+          "Managed embedding request failed modelRef={} texts={} elapsedMs={} reason={}",
+          modelRef,
+          texts.size(),
+          elapsedMillis(startedAt),
+          e.getMessage()
+      );
       throw new RuntimeException("Managed embedding request failed: " + e.getMessage(), e);
     }
 
@@ -78,8 +96,22 @@ public final class ManagedEmbeddingClient {
       if (out.size() != texts.size()) {
         throw new IllegalStateException("Managed embedding bad response: vector count mismatch");
       }
+      log.info(
+          "Managed embedding request completed modelRef={} texts={} vectors={} elapsedMs={}",
+          modelRef,
+          texts.size(),
+          out.size(),
+          elapsedMillis(startedAt)
+      );
       return out;
     } catch (Exception e) {
+      log.warn(
+          "Managed embedding response parse failed modelRef={} texts={} elapsedMs={} reason={}",
+          modelRef,
+          texts.size(),
+          elapsedMillis(startedAt),
+          e.getMessage()
+      );
       throw new RuntimeException("Failed to parse managed embedding response: " + e.getMessage(), e);
     }
   }
@@ -94,5 +126,9 @@ public final class ManagedEmbeddingClient {
     if (s == null) return "";
     if (s.length() <= max) return s;
     return s.substring(0, max) + "...";
+  }
+
+  private static long elapsedMillis(long startedAt) {
+    return (System.nanoTime() - startedAt) / 1_000_000L;
   }
 }

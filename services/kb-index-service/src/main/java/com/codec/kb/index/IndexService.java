@@ -39,6 +39,7 @@ public class IndexService {
   private final DocumentJpaRepository docRepo;
   private final ChunkJpaRepository chunkRepo;
   private final EmbeddingFacade embeddingFacade;
+  private final PgvectorStatusService pgvectorStatus;
   private final IndexTuning tuning;
   private final FloatArrayConverter vecConv = new FloatArrayConverter();
 
@@ -51,12 +52,14 @@ public class IndexService {
       DocumentJpaRepository docRepo,
       ChunkJpaRepository chunkRepo,
       EmbeddingFacade embeddingFacade,
-      IndexTuning tuning) {
+      IndexTuning tuning,
+      PgvectorStatusService pgvectorStatus) {
     this.kbRepo = kbRepo;
     this.docRepo = docRepo;
     this.chunkRepo = chunkRepo;
     this.embeddingFacade = embeddingFacade;
     this.tuning = tuning;
+    this.pgvectorStatus = pgvectorStatus;
     ensureDefaultKbExists();
   }
 
@@ -122,6 +125,11 @@ public class IndexService {
     String id = normalizeKbId(kbId);
     String docId = req.document().id();
 
+    // Compute embeddings before touching persisted state so failures do not leave
+    // a partial write path behind.
+    List<String> texts = req.chunks().stream().map(ChunkDto::text).toList();
+    List<float[]> vecs = embedForWrite(id, texts);
+
     // Remove old data for this document
     chunkRepo.deleteByDocId(docId);
     docRepo.deleteById(docId);
@@ -129,10 +137,6 @@ public class IndexService {
     // Persist document
     DocumentEntity docE = toDocEntity(req.document(), id);
     docRepo.save(docE);
-
-    // Compute embeddings for all new chunks
-    List<String> texts = req.chunks().stream().map(ChunkDto::text).toList();
-    List<float[]> vecs = embedForWrite(id, texts);
 
     // Persist chunks
     List<ChunkEntity> chunkEntities = new ArrayList<>();
@@ -150,6 +154,14 @@ public class IndexService {
       chunkEntities.add(ce);
     }
     chunkRepo.saveAll(chunkEntities);
+    long chunksWithEmbedding = countNonNullEmbeddings(vecs);
+    log.info(
+        "Upserted document docId={} into kbId={} chunks={} chunksWithEmbedding={}",
+        docId,
+        id,
+        req.chunks().size(),
+        chunksWithEmbedding
+    );
 
     // Invalidate BM25 cache; will be rebuilt lazily on next search
     bm25Cache.remove(id);
@@ -183,9 +195,14 @@ public class IndexService {
   // ─── Reindex ──────────────────────────────────────────────────────────────
 
   @Transactional
-  public void reindexAllEmbeddings(String kbId) {
+  public Map<String, Object> reindexAllEmbeddings(String kbId) {
     String id = normalizeKbId(kbId);
     List<ChunkEntity> chunks = chunkRepo.findByKbId(id);
+    log.info("Reindex started for kbId={} chunks={}", id, chunks.size());
+    if (chunks.isEmpty()) {
+      log.info("Reindex skipped for kbId={}, no chunks found", id);
+      return reindexResult(id, 0, 0);
+    }
     List<String> texts = chunks.stream().map(ChunkEntity::getContent).toList();
     List<float[]> vecs = embedForKb(id, texts);
     for (int i = 0; i < chunks.size(); i++) {
@@ -193,16 +210,42 @@ public class IndexService {
     }
     chunkRepo.saveAll(chunks);
     bm25Cache.remove(id);
+    long chunksWithEmbedding = countNonNullEmbeddings(vecs);
+    log.info(
+        "Reindex finished for kbId={} chunks={} chunksWithEmbedding={}",
+        id,
+        chunks.size(),
+        chunksWithEmbedding
+    );
+    return reindexResult(id, chunks.size(), chunksWithEmbedding);
   }
 
   @Transactional
-  public void reindexAllEmbeddings() {
+  public Map<String, Object> reindexAllEmbeddings() {
+    int kbCount = 0;
+    long chunkCount = 0L;
+    long chunksWithEmbedding = 0L;
     for (KbEntity kb : kbRepo.findAll()) {
       if (kb == null) continue;
       String kbId = kb.getId();
       if (kbId == null || kbId.isBlank()) continue;
-      reindexAllEmbeddings(kbId);
+      Map<String, Object> result = reindexAllEmbeddings(kbId);
+      kbCount++;
+      chunkCount += numberValue(result.get("chunks"));
+      chunksWithEmbedding += numberValue(result.get("chunksWithEmbedding"));
     }
+    PgvectorStatusService.Status status = pgvectorStatus.currentStatus();
+    LinkedHashMap<String, Object> out = new LinkedHashMap<>();
+    out.put("ok", true);
+    out.put("knowledgeBases", kbCount);
+    out.put("chunks", chunkCount);
+    out.put("chunksWithEmbedding", chunksWithEmbedding);
+    out.put("chunksWithoutEmbedding", Math.max(0L, chunkCount - chunksWithEmbedding));
+    out.put("pgvectorInstalled", status.pgvectorInstalled());
+    out.put("embeddingColumnType", status.embeddingColumnType());
+    out.put("denseRetrievalAvailable", status.denseRetrievalAvailable());
+    out.put("updatedAt", Instant.now().toString());
+    return out;
   }
 
   // ─── Queries ───────────────────────────────────────────────────────────────
@@ -284,22 +327,27 @@ public class IndexService {
   }
 
   private List<SearchHit> searchInKb(String kbId, String query, int topK) {
-    // ── Dense search via pgvector (optional: requires pgvector extension) ─────
+    // ── Dense search via native pgvector storage ───────────────────────────────
     LinkedHashMap<String, Double> denseScores = new LinkedHashMap<>();
     LinkedHashMap<String, ChunkDto> denseChunks = new LinkedHashMap<>();
-    try {
-      float[] qvec = embedForKb(kbId, List.of(query)).get(0);
-      String vecStr = vecConv.convertToDatabaseColumn(qvec);
-      List<Object[]> denseRows = chunkRepo.findTopKByDenseSimilarity(kbId, vecStr, topK * 2);
-      for (Object[] row : denseRows) {
-        String cid = String.valueOf(row[0]);
-        double score = row[6] instanceof Number ? ((Number) row[6]).doubleValue() : 0.0;
-        denseScores.put(cid, score);
-        denseChunks.put(cid, rowToChunkDto(row));
+    PgvectorStatusService.Status pgvector = pgvectorStatus.currentStatus();
+    if (pgvector.denseRetrievalAvailable()) {
+      try {
+        float[] qvec = embedForKb(kbId, List.of(query)).get(0);
+        String vecStr = vecConv.convertToDatabaseColumn(qvec);
+        List<Object[]> denseRows = chunkRepo.findTopKByDenseSimilarity(kbId, vecStr, topK * 2);
+        for (Object[] row : denseRows) {
+          String cid = String.valueOf(row[0]);
+          double score = row[6] instanceof Number ? ((Number) row[6]).doubleValue() : 0.0;
+          denseScores.put(cid, score);
+          denseChunks.put(cid, rowToChunkDto(row));
+        }
+      } catch (Exception e) {
+        // Native vector retrieval or embedding unavailable — fall back to BM25
+        log.debug("Dense search skipped for kbId={}: {}", kbId, e.getMessage());
       }
-    } catch (Exception e) {
-      // pgvector or embedding not available — fall back to BM25
-      log.debug("Dense search skipped for kbId={}: {}", kbId, e.getMessage());
+    } else {
+      log.debug("Dense search disabled for kbId={} because native pgvector storage is unavailable", kbId);
     }
 
     // ── BM25 search (in-memory, rebuilt lazily from DB text) ───────────────
@@ -357,15 +405,28 @@ public class IndexService {
   @Transactional(readOnly = true)
   public Map<String, Object> stats(String kbId) {
     String id = normalizeKbId(kbId);
+    KbEntity kb = kbRepo.findById(id).orElse(null);
     long docs = docRepo.countByKbId(id);
     long chunks = chunkRepo.countByKbId(id);
+    long chunksWithEmbedding = chunkRepo.countByKbIdAndEmbeddingIsNotNull(id);
     long sizeBytes = docRepo.sumSizeBytesByKbId(id);
-    return Map.of(
-        "documents", docs,
-        "chunks", chunks,
-        "sizeBytes", sizeBytes,
-        "updatedAt", Instant.now().toString()
-    );
+    PgvectorStatusService.Status status = pgvectorStatus.currentStatus();
+
+    LinkedHashMap<String, Object> out = new LinkedHashMap<>();
+    out.put("kbId", id);
+    out.put("documents", docs);
+    out.put("chunks", chunks);
+    out.put("chunksWithEmbedding", chunksWithEmbedding);
+    out.put("chunksWithoutEmbedding", Math.max(0L, chunks - chunksWithEmbedding));
+    out.put("sizeBytes", sizeBytes);
+    out.put("embeddingMode", kb == null ? "" : blankIfNull(kb.getEmbeddingMode()));
+    out.put("embeddingModel", kb == null ? "" : blankIfNull(kb.getEmbeddingModel()));
+    out.put("pgvectorInstalled", status.pgvectorInstalled());
+    out.put("embeddingColumnType", status.embeddingColumnType());
+    out.put("denseRetrievalAvailable", status.denseRetrievalAvailable());
+    out.put("retrievalMode", status.denseRetrievalAvailable() ? "hybrid" : "bm25-only");
+    out.put("updatedAt", Instant.now().toString());
+    return out;
   }
 
   @Transactional(readOnly = true)
@@ -414,18 +475,48 @@ public class IndexService {
 
   private List<float[]> embedForWrite(String kbId, List<String> texts) {
     if (texts == null || texts.isEmpty()) return List.of();
+    List<float[]> vecs;
     try {
-      List<float[]> vecs = embeddingFacade.embed(kbId, texts);
-      if (vecs == null || vecs.size() != texts.size()) {
-        throw new IllegalStateException("embedding count mismatch");
-      }
-      return vecs;
+      vecs = embeddingFacade.embed(kbId, texts);
     } catch (Exception e) {
-      log.warn("Embedding unavailable for kbId={}, storing chunks without vectors: {}", kbId, e.getMessage());
-      ArrayList<float[]> fallback = new ArrayList<>(texts.size());
-      for (int i = 0; i < texts.size(); i++) fallback.add(null);
-      return fallback;
+      throw new IllegalStateException("Embedding write failed for kbId=" + kbId + ": " + e.getMessage(), e);
     }
+    if (vecs == null || vecs.size() != texts.size()) {
+      throw new IllegalStateException("Embedding write failed for kbId=" + kbId + ": embedding count mismatch");
+    }
+    return vecs;
+  }
+
+  private Map<String, Object> reindexResult(String kbId, long chunks, long chunksWithEmbedding) {
+    PgvectorStatusService.Status status = pgvectorStatus.currentStatus();
+    LinkedHashMap<String, Object> out = new LinkedHashMap<>();
+    out.put("ok", true);
+    out.put("kbId", kbId);
+    out.put("chunks", chunks);
+    out.put("chunksWithEmbedding", chunksWithEmbedding);
+    out.put("chunksWithoutEmbedding", Math.max(0L, chunks - chunksWithEmbedding));
+    out.put("pgvectorInstalled", status.pgvectorInstalled());
+    out.put("embeddingColumnType", status.embeddingColumnType());
+    out.put("denseRetrievalAvailable", status.denseRetrievalAvailable());
+    out.put("updatedAt", Instant.now().toString());
+    return out;
+  }
+
+  private static long countNonNullEmbeddings(List<float[]> vecs) {
+    long count = 0L;
+    if (vecs == null) return 0L;
+    for (float[] vec : vecs) {
+      if (vec != null) count++;
+    }
+    return count;
+  }
+
+  private static long numberValue(Object value) {
+    return value instanceof Number n ? n.longValue() : 0L;
+  }
+
+  private static String blankIfNull(String value) {
+    return value == null ? "" : value;
   }
 
   // ─── Converters ────────────────────────────────────────────────────────────
