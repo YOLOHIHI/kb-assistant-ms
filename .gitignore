@@ -44,3 +44,6 @@ services/kb-gateway/src/main/resources/static/404.html
 **/node_modules/
 **/.next/
 **/out/
+
+# Evaluation workspace (private: company policy docs + eval credentials)
+/eval/

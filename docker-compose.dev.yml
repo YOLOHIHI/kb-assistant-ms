@@ -1,18 +1,22 @@
 # ──────────────────────────────────────────────────────────────────
-# Local-development PostgreSQL for kb-assistant-ms
-# Usage:
-#   docker compose -f docker-compose.dev.yml up -d   # start DB
-#   docker compose -f docker-compose.dev.yml down     # stop DB
-#   docker compose -f docker-compose.dev.yml down -v  # stop + wipe data
+# Local-development infra for kb-assistant-ms
 #
-# After the DB is running, start each service from your IDE or via:
-#   mvn spring-boot:run -pl services/kb-gateway
-#   mvn spring-boot:run -pl services/kb-ai-service
-#   mvn spring-boot:run -pl services/kb-index-service
+# 启动：docker compose -f docker-compose.dev.yml up -d
+# 停止：docker compose -f docker-compose.dev.yml down
+# 清除数据：docker compose -f docker-compose.dev.yml down -v
 #
-# All services default to:
+# 这份 compose 只提供 IDEA 本地开发需要的基础设施：
+#   - kb-db       : PostgreSQL（pgvector/pgvector:pg16），宿主机 5432
+#   - kb-embedder : Python FastAPI 嵌入服务，宿主机 8090
+#
+# 起来之后，在 IDEA 里启动 5 个 Spring Boot 服务即可：
+#   kb-gateway / kb-doc-service / kb-index-service / kb-ai-service
+#   （+ 可选 kb-eureka-server）
+#
+# 各 Spring 服务默认连接：
 #   url: jdbc:postgresql://localhost:5432/kb
-#   username: kb   password: kb
+#   username: kb    password: kb
+#   embedder: http://localhost:8090
 # ──────────────────────────────────────────────────────────────────
 services:
   postgres:
@@ -35,6 +39,35 @@ services:
       timeout: 5s
       retries: 10
 
+  kb-embedder:
+    # 复用 services/kb-embedder 的 Dockerfile；首次启动会构建镜像（~5 分钟）。
+    # 之后 IDEA 本地跑 kb-index-service 会直接调用 http://localhost:8090/embed，
+    # 不再需要 scripts/ensure-embedder.ps1 或 .run/ Before Launch 任务。
+    build:
+      context: ./services/kb-embedder
+    image: kb-assistant-ms-kb-embedder:latest
+    container_name: kb-embedder
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    environment:
+      # 国内访问 HuggingFace 受限时取消注释：
+      # HF_ENDPOINT: https://hf-mirror.com
+      EMBED_MODEL: BAAI/bge-small-zh-v1.5
+    volumes:
+      # 持久化模型缓存，避免每次重建容器重新下载
+      - kb-embedder-cache:/root/.cache/huggingface
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=5).read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+
 volumes:
   kb-db-data:
+    # 已有的数据卷（由早期的 dev compose 或 ensure-postgres.ps1 创建），声明为 external 避免重复创建
+    external: true
     name: kb-db-data
+  kb-embedder-cache:
+    name: kb-embedder-cache

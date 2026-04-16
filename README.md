@@ -100,12 +100,15 @@ kb-assistant-ms/
 说明：
 
 - 三个 JPA 服务（`kb-gateway`、`kb-index-service`、`kb-ai-service`）需要 PostgreSQL 才能启动。
-  - **推荐**：确保 Docker Desktop 已运行，并统一复用项目的 `kb-db` 容器（`pgvector/pgvector:pg16`，数据库 `kb`，用户 `kb`，密码 `kb`）。
-  - **备选**：若 `kb-db` 容器不存在，执行 `docker compose -f docker-compose.dev.yml up -d` 重建；该 Compose 也会创建同名 `kb-db` 容器并使用 `kb-db-data` 数据卷，不会再额外起第二套 dev 库。
+  - **推荐**：用项目根目录的 `docker-compose.dev.yml` 一键起本地开发基础设施。该 compose 提供两个容器：`kb-db`（pgvector/pgvector:pg16，数据库 `kb`，用户 `kb`，密码 `kb`，宿主机 `5432`）和 `kb-embedder`（Python FastAPI 嵌入服务，宿主机 `8090`，HTTP 模式下 `kb-index-service` 会调用它）。
+  - 两个容器在 Docker Desktop UI 里归在 `kb-assistant-ms` 分组下，点 Start 同时起来。
   - 如果你以前已经用过旧的 `postgres:16-alpine` 本地库，再切到现在这套 pgvector 镜像后，需要至少执行一次 `CREATE EXTENSION IF NOT EXISTS vector;`；若想让迁移从头完整执行，也可以直接重建本地 `kb-db-data` 数据卷。
   - `kb-doc-service` 不使用 PostgreSQL，可独立启动。
-- `scripts/ensure-postgres.ps1` 会优先检测 `localhost:5432`，若端口未监听且本机安装了 Docker，则创建或启动同一套 `kb-db` / `kb-db-data`。
-- 本地嵌入默认走 JVM 内置 DJL 后端（`KB_EMBEDDER_MODE=djl`），首次启动时 `kb-index-service` 会自动下载 `Xenova/bge-small-zh-v1.5` 的 ONNX 模型到 `~/.djl.ai/kb-embedder/`，需要能访问 HuggingFace（国内访问受限时设置 `HF_ENDPOINT=https://hf-mirror.com`）。要改用外置 Python embedder，设置 `KB_EMBEDDER_MODE=http` 并运行 `scripts/ensure-embedder.ps1`。
+- `scripts/ensure-postgres.ps1` 是单独起 Postgres 的脚本（只起 `kb-db`，不起 `kb-embedder`），保留作为备选。
+- 本地嵌入有两种模式，由 `KB_EMBEDDER_MODE` 控制：
+  - `djl`（默认）：JVM 内通过 DJL + ONNX Runtime 直接运行 `BAAI/bge-small-zh-v1.5`。首次启动自动下载约 100 MB 模型到 `~/.djl.ai/kb-embedder/`（国内访问受限时设 `HF_ENDPOINT=https://hf-mirror.com`）。Windows 需要 Microsoft Visual C++ 2019/2022 x64 Redistributable；若报 `UnsatisfiedLinkError: onnxruntime.dll ... DLL 初始化例程失败`，通常是 Windows ML / Edge / Office 自带的 onnxruntime.dll 版本冲突，切到 `http` 模式最省心。
+  - `http`：调用 `http://localhost:8090/embed`，由 `docker-compose.dev.yml` 里的 `kb-embedder` 容器提供，**无需本地 Python 环境**。在 `.env` 里设 `KB_EMBEDDER_MODE=http` 启用。
+- 如果你不想用 Docker 跑 embedder，也可以用本地 Python venv：运行 `.\scripts\setup-python.ps1 -Service embedder` 创建环境，再用 `.\scripts\ensure-embedder.ps1` 启动 uvicorn。效果与 compose 里的 `kb-embedder` 容器等价。
 - 如果未配置 `SILICONFLOW_*`，聊天仍可运行，但回答会退化为基于检索片段的兜底输出。
 
 ### Docker Compose
@@ -128,23 +131,29 @@ cd .\kb-assistant-ms
 # 1) 复制本地开发环境变量
 Copy-Item .\.env.example .\.env
 
-# 2) 确保 PostgreSQL 可用（需要 Docker Desktop）
-.\scripts\ensure-postgres.ps1
+# 2) 一键起本地开发基础设施（PostgreSQL + Python 嵌入服务）
+docker compose -f docker-compose.dev.yml up -d
+# 等价方式：Docker Desktop UI 里点 `kb-assistant-ms` 分组的 Start
 
 # 3) 构建 Java 服务
 mvn -DskipTests package
 
 # 4) 在 IDEA 中逐个启动 5 个 Spring Boot 服务（或使用 Services 面板一键启动）：
 #    kb-gateway / kb-doc-service / kb-index-service / kb-ai-service（+ 可选 kb-eureka-server）
+#    不需要任何 Before Launch / PowerShell 脚本
 ```
 
-> **本地嵌入模式**：`kb-index-service` 默认使用 `KB_EMBEDDER_MODE=djl`，在 JVM 内通过 DJL + ONNX Runtime 直接运行 `BAAI/bge-small-zh-v1.5`（ONNX 权重来自社区导出仓库 `Xenova/bge-small-zh-v1.5`，与 Python 端 sentence-transformers 完全同权重），不再需要单独启动 Python `kb-embedder`，也不需要运行 `scripts/setup-python.ps1` / `scripts/ensure-embedder.ps1`。首次启动会下载约 100 MB 模型到 `~/.djl.ai/kb-embedder/`（需要能访问 HuggingFace）。
+> **本地嵌入模式（二选一）**：
 >
-> 国内网络访问 HuggingFace 受限时，可设置 `HF_ENDPOINT=https://hf-mirror.com`；缓存目录可通过 `KB_EMBEDDER_CACHE_DIR` 自定义。
+> - `KB_EMBEDDER_MODE=djl`（默认）：JVM 内通过 DJL + ONNX Runtime 直接运行 `BAAI/bge-small-zh-v1.5`（ONNX 权重来自社区导出仓库 `Xenova/bge-small-zh-v1.5`，与 Python 端 sentence-transformers 完全同权重）。`docker-compose.dev.yml` 里的 `kb-embedder` 容器会空转但不被使用，想省资源可把它单独停掉。首次启动会下载约 100 MB 模型到 `~/.djl.ai/kb-embedder/`。
 >
-> **Windows 依赖**：ONNX Runtime 原生库依赖 Microsoft Visual C++ 2019/2022 x64 Redistributable。若启动时报 `UnsatisfiedLinkError: onnxruntime.dll ... DLL 初始化例程失败`，请安装 https://aka.ms/vs/17/release/vc_redist.x64.exe 后重启 IDE。
+> - `KB_EMBEDDER_MODE=http`：`kb-index-service` 调用 `http://localhost:8090/embed`，这个端点由 `docker-compose.dev.yml` 里的 `kb-embedder` 容器提供。**推荐 Windows 环境选这个**：如果你遇到过 `UnsatisfiedLinkError: onnxruntime.dll ... DLL 初始化例程失败`（多为 Windows ML / Edge / Office 自带的 onnxruntime.dll 版本冲突），http 模式可以绕开。
 >
-> 如果想继续使用外部 Python embedder（与 Docker/K8s 路径一致）：在 `.env` 里设置 `KB_EMBEDDER_MODE=http`，然后运行 `.\scripts\setup-python.ps1 -Service embedder` 和 `.\scripts\ensure-embedder.ps1`。
+> 国内网络访问 HuggingFace 受限时，可设置 `HF_ENDPOINT=https://hf-mirror.com`。
+>
+> **DJL 模式的 Windows 依赖**：ONNX Runtime 原生库依赖 Microsoft Visual C++ 2019/2022 x64 Redistributable，安装地址 https://aka.ms/vs/17/release/vc_redist.x64.exe。
+>
+> **不想用 Docker 跑 embedder**（只想要本地 Python venv）：运行 `.\scripts\setup-python.ps1 -Service embedder` 创建 venv，再用 `.\scripts\ensure-embedder.ps1` 启动 uvicorn。效果与 compose 里 `kb-embedder` 容器等价。
 
 前端修改后需要重新构建：
 
@@ -447,7 +456,8 @@ Docker Compose 版本见 `deploy/docker/.env.example`。
 | --- | --- |
 | `build.cmd` | 根目录快捷入口：调用 `scripts/build.ps1` 构建三个前端并复制产物 |
 | `scripts/build.ps1` | pnpm workspace 根安装 + 构建三个前端（`apps/chat` `apps/admin` `apps/home`），并把静态导出结果复制到 `kb-gateway` 静态目录 |
-| `scripts/ensure-postgres.ps1` | 检测 `localhost:5432`；若不可用则通过 `docker-compose.dev.yml` 拉起 PostgreSQL |
+| `scripts/ensure-postgres.ps1` | 只起 PostgreSQL 的兜底脚本（走 `docker-compose.dev.yml` 但不拉 `kb-embedder`）；一般直接 `docker compose -f docker-compose.dev.yml up -d` 即可 |
+| `scripts/ensure-embedder.ps1` | 本地 Python venv 方案起 kb-embedder（uvicorn 8090）；与 `docker-compose.dev.yml` 里的 `kb-embedder` 容器二选一 |
 | `scripts/setup-python.ps1 -Service embedder\|ocr` | 为指定 Python 服务创建 venv 并安装依赖 |
 
 ## 文档索引
